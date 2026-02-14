@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CHOSO OFFSET UPDATER</title>
+
+<style>
+body{
+  background:#050505;
+  color:#00ff41;
+  font-family:monospace;
+  padding:20px;
+}
+
+h2{
+  text-shadow:0 0 10px #00ff41;
+}
+
+.box{
+  border:1px solid #00ff41;
+  padding:15px;
+  margin-bottom:15px;
+  box-shadow:0 0 15px #00ff41;
+}
+
+input{
+  display:block;
+  margin:10px 0;
+  color:#00ff41;
+}
+
+button{
+  background:black;
+  color:#00ff41;
+  border:1px solid #00ff41;
+  padding:10px 20px;
+  cursor:pointer;
+  box-shadow:0 0 10px #00ff41;
+}
+
+button:hover{
+  background:#003b00;
+  box-shadow:0 0 20px #00ff41;
+}
+
+#log{
+  background:black;
+  padding:15px;
+  height:300px;
+  overflow:auto;
+  border:1px solid #00ff41;
+  box-shadow:0 0 15px #00ff41 inset;
+  white-space:pre-wrap;
+}
+
+/* blinking cursor */
+.cursor{
+  animation:blink 1s infinite;
+}
+@keyframes blink{
+  50%{opacity:0;}
+}
+</style>
+</head>
+
+<body>
+
+<h2>⚡ CHOSO OFFSET UPDATER ⚡</h2>
+
+<div class="box">
+OLD dump:
+<input type="file" id="oldDump">
+
+NEW dump:
+<input type="file" id="newDump">
+
+Target file:
+<input type="file" id="targetFile">
+
+<button onclick="process()">RUN UPDATE</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+function log(msg){
+  const logBox=document.getElementById("log");
+  logBox.textContent+=msg+"\n";
+  logBox.scrollTop=logBox.scrollHeight;
+}
+
+function readFile(file){
+  return new Promise(res=>{
+    const reader=new FileReader();
+    reader.onload=e=>res(e.target.result);
+    reader.readAsText(file);
+  });
+}
+
+function parseFunctions(text){
+  const lines=text.split("\n");
+  const regex=/\s*(\w+\s+\w+\s*.*?)(RVA:\s*(0x[0-9A-Fa-f]+))/;
+  let funcs={};
+
+  lines.forEach(line=>{
+    let m=line.match(regex);
+    if(m){
+      funcs[m[3].toLowerCase()]=m[1].trim();
+    }
+  });
+
+  return funcs;
+}
+
+async function process(){
+  log("Initializing hack tool...\n");
+
+  const oldFile=document.getElementById("oldDump").files[0];
+  const newFile=document.getElementById("newDump").files[0];
+  const targetFile=document.getElementById("targetFile").files[0];
+
+  if(!oldFile||!newFile||!targetFile){
+    alert("Upload all files!");
+    return;
+  }
+
+  let oldText=await readFile(oldFile);
+  let newText=await readFile(newFile);
+  let targetText=await readFile(targetFile);
+
+  let oldSigs=parseFunctions(oldText);
+  let newSigs=parseFunctions(newText);
+
+  let results={};
+  let updated=0;
+
+  for(let oldOff in oldSigs){
+    let func=oldSigs[oldOff];
+    log(">> Scanning "+oldOff+" → "+func);
+
+    let match=Object.keys(newSigs)
+      .find(k=>newSigs[k]===func);
+
+    if(match){
+      results[oldOff]=match;
+      updated++;
+      log("   ✔ FOUND "+match);
+    }else{
+      results[oldOff]=oldOff;
+      log("   ✖ NOT FOUND");
+    }
+  }
+
+  log("\nOffsets updated: "+updated+"\n");
+
+  for(let old in results){
+    let re=new RegExp(old,"g");
+    targetText=targetText.replace(re,results[old]);
+  }
+
+  const blob=new Blob([targetText],{type:"text/plain"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="updated_"+targetFile.name;
+  a.click();
+
+  log(">>> EXPORT COMPLETE");
+  log(">>> FILE DOWNLOADED");
+  log("\nSYSTEM IDLE _");
+}
+</script>
+
+</body>
+</html>
